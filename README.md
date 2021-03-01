@@ -327,8 +327,78 @@ public interface ReserveService {
 
 <img width="1116" alt="스크린샷 2021-03-01 오후 7 44 31" src="https://user-images.githubusercontent.com/43164924/109486682-8d706a00-7ac6-11eb-81c8-980c0a612005.png">
 
+## 비동기식 호출 (Pub/Sub 방식)
 
+- reserve 서비스 내 Reserve.java에서 아래와 같이 서비스 Pub 구현
 
+```java
+@Entity
+@Table(name="Reserve_table")
+public class Reserve {
+
+    @Id
+    @GeneratedValue(strategy=GenerationType.AUTO)
+    private Long id;
+    private String userId;
+    private Long roomId;
+    private String status;
+
+    //...
+
+    @PostPersist
+    public void onPostPersist(){
+        Reserved reserved = new Reserved();
+        BeanUtils.copyProperties(this, reserved);
+        reserved.publishAfterCommit();
+    }
+}
+```
+
+- room 서비스 내 PolicyHandler.java 에서 아래와 같이 Sub 구현
+
+```java
+@Service
+public class PolicyHandler{
+    @Autowired
+    RoomRepository roomRepository;
+
+    //...
+    @StreamListener(KafkaProcessor.INPUT)
+    public void wheneverReserved_(@Payload Reserved reserved){
+
+        if(reserved.isMe()){
+            Optional<Room> room = roomRepository.findById(reserved.getRoomId());
+            System.out.println("##### listener  : " + reserved.toJson());
+            if (room.isPresent()){
+                room.get().setStatus("Reserved");//회의실이 예약됨.
+                roomRepository.save(room.get());
+            }
+        }
+    }
+  }
+```
+- 비동기 호출은 다른 서비스 하나가 비정상이어도 해당 메세지를 다른 메시지 큐에서 보관하고 있기에, 서비스가 다시 정상으로 돌아오게 되면 그 메시지를 처리하게 된다.
+  - reserve 서비스와 room 서비스가 둘 다 정상 작동을 하고 있을 경우, 이상이 없이 잘 된다.
+  <img width="1116" alt="스크린샷 2021-03-01 오후 8 01 56" src="https://user-images.githubusercontent.com/43164924/109488499-fc4ec280-7ac8-11eb-9a52-77d6e4939417.png">
+  - room 서비스를 내렸다.
+  <img width="298" alt="스크린샷 2021-03-01 오후 8 02 28" src="https://user-images.githubusercontent.com/43164924/109488553-0ffa2900-7ac9-11eb-8d08-1e7d7ea7aff3.png">
+  - reserve 서비스를 이용해 예약을 하여도 문제가 없이 동작한다.
+  <img width="906" alt="스크린샷 2021-03-01 오후 8 03 47" src="https://user-images.githubusercontent.com/43164924/109488704-3e780400-7ac9-11eb-80ee-ad1714bf8991.png">
+
+## CQRS
+
+viewer인 schedule 서비스를 별도로 구현하여 아래와 같이 view를 출력한다.
+- Reserved 수행 후 schedule (예약 진행)
+<img width="906" alt="스크린샷 2021-03-01 오후 8 07 43" src="https://user-images.githubusercontent.com/43164924/109489147-ccec8580-7ac9-11eb-86f4-24d7b6db92ac.png">
+
+- Ended 수행 후 schedule (회의 시작 후, 회의 종료)
+<img width="906" alt="스크린샷 2021-03-01 오후 8 08 49" src="https://user-images.githubusercontent.com/43164924/109489279-f2798f00-7ac9-11eb-8ee3-55ca97c0b27b.png">
+
+- 다시 Reserved 수행 후 schedule (예약 진행)
+<img width="906" alt="스크린샷 2021-03-01 오후 8 09 26" src="https://user-images.githubusercontent.com/43164924/109489335-09b87c80-7aca-11eb-8db2-b56a049521c9.png">
+
+- Canceled 수행 후 schedule (예약 취소)
+<img width="906" alt="스크린샷 2021-03-01 오후 8 10 53" src="https://user-images.githubusercontent.com/43164924/109489448-3c627500-7aca-11eb-8f63-894d2d78ece4.png">
 
 # 운영
 ## CI/CD 설정
