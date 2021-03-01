@@ -276,6 +276,58 @@ server:
 
 <img width="446" alt="스크린샷 2021-03-01 오후 6 43 02" src="https://user-images.githubusercontent.com/43164924/109479663-f6071900-7abd-11eb-8c22-eda690cadea4.png">
 
+## 동기식 호출(Req/Res 방식)과 Fallback 처리
+
+- conference 서비스의 external/ReserveService.java 내에 예약한 사용자가 맞는지 확인하는 Service 대행 인터페이스(Proxy)를 FeignClient를 이용하여 구현하였다.
+
+```java
+@FeignClient(name="reserve", url="${api.reserve.url}")
+public interface ReserveService {
+
+    @RequestMapping(method= RequestMethod.GET, path="/reserves/check")
+    public String userCheck(@RequestBody Reserve reserve);
+
+}
+```
+- conference 서비스의 Conference.java 내에 사용자 확인 후 결과에 따라 회의 시작을 진행할지, 진행하지 않을지 결정.(@PrePersist)
+```java
+@PrePersist
+    public void onPrePersist(){
+        /*Started started = new Started();
+        BeanUtils.copyProperties(this, started);
+        started.publishAfterCommit();*/
+
+        //Following code causes dependency to external APIs
+        // it is NOT A GOOD PRACTICE. instead, Event-Policy mapping is recommended.
+
+        meetingroom.external.Reserve reserve = new meetingroom.external.Reserve();
+        // mappings goes here
+        reserve.setId(reserveId);
+        reserve.setUserId(userId);
+        reserve.setRoomId(roomId);
+        String result = ConferenceApplication.applicationContext.getBean(meetingroom.external.ReserveService.class).userCheck(reserve);
+
+        if(result.equals("valid")){
+            System.out.println("Success!");
+        }
+        else{
+            /// usercheck가 유효하지 않을 때 강제로 예외 발생
+                System.out.println("FAIL!! InCorrect User or Incorrect Resevation");
+                Exception ex = new Exception();
+                ex.notify();
+        }
+    }
+```
+- 동기식 호출에서는 호출 시간에 따른 커플링이 발생하여, Reserve 시스템에 장애가 나면 회의 시작을 할 수가 없다. (Reserve 시스템에서 예약한 사용자인지를 확인하므로)
+  - Reserve 서비스를 중지.
+<img width="316" alt="스크린샷 2021-03-01 오후 7 39 17" src="https://user-images.githubusercontent.com/43164924/109486134-d247d100-7ac5-11eb-897a-54091bb13381.png">
+  - conference 서비스에서 회의 시작 시 에러 발생.
+<img width="1116" alt="스크린샷 2021-03-01 오후 7 41 00" src="https://user-images.githubusercontent.com/43164924/109486323-0fac5e80-7ac6-11eb-99e2-0ee7cc1f86e8.png">
+  - reserve 서비스 재기동 후 다시 회의 시작 요청.
+
+<img width="1116" alt="스크린샷 2021-03-01 오후 7 44 31" src="https://user-images.githubusercontent.com/43164924/109486682-8d706a00-7ac6-11eb-81c8-980c0a612005.png">
+
+
 
 
 # 운영
