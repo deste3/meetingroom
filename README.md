@@ -319,13 +319,9 @@ public interface ReserveService {
     }
 ```
 - 동기식 호출에서는 호출 시간에 따른 커플링이 발생하여, Reserve 시스템에 장애가 나면 회의 시작을 할 수가 없다. (Reserve 시스템에서 예약한 사용자인지를 확인하므로)
-  - Reserve 서비스를 중지.
-<img width="316" alt="스크린샷 2021-03-01 오후 7 39 17" src="https://user-images.githubusercontent.com/43164924/109486134-d247d100-7ac5-11eb-897a-54091bb13381.png">
-  - conference 서비스에서 회의 시작 시 에러 발생.
-<img width="1116" alt="스크린샷 2021-03-01 오후 7 41 00" src="https://user-images.githubusercontent.com/43164924/109486323-0fac5e80-7ac6-11eb-99e2-0ee7cc1f86e8.png">
-  - reserve 서비스 재기동 후 다시 회의 시작 요청.
-
-<img width="1116" alt="스크린샷 2021-03-01 오후 7 44 31" src="https://user-images.githubusercontent.com/43164924/109486682-8d706a00-7ac6-11eb-81c8-980c0a612005.png">
+  - Reserve 서비스를 중지. <img width="316" alt="스크린샷 2021-03-01 오후 7 39 17" src="https://user-images.githubusercontent.com/43164924/109486134-d247d100-7ac5-11eb-897a-54091bb13381.png">
+  - conference 서비스에서 회의 시작 시 에러 발생. <img width="1116" alt="스크린샷 2021-03-01 오후 7 41 00" src="https://user-images.githubusercontent.com/43164924/109486323-0fac5e80-7ac6-11eb-99e2-0ee7cc1f86e8.png">
+  - reserve 서비스 재기동 후 다시 회의 시작 요청. <img width="1116" alt="스크린샷 2021-03-01 오후 7 44 31" src="https://user-images.githubusercontent.com/43164924/109486682-8d706a00-7ac6-11eb-81c8-980c0a612005.png">
 
 ## 비동기식 호출 (Pub/Sub 방식)
 
@@ -378,12 +374,9 @@ public class PolicyHandler{
   }
 ```
 - 비동기 호출은 다른 서비스 하나가 비정상이어도 해당 메세지를 다른 메시지 큐에서 보관하고 있기에, 서비스가 다시 정상으로 돌아오게 되면 그 메시지를 처리하게 된다.
-  - reserve 서비스와 room 서비스가 둘 다 정상 작동을 하고 있을 경우, 이상이 없이 잘 된다.
-  <img width="1116" alt="스크린샷 2021-03-01 오후 8 01 56" src="https://user-images.githubusercontent.com/43164924/109488499-fc4ec280-7ac8-11eb-9a52-77d6e4939417.png">
-  - room 서비스를 내렸다.
-  <img width="298" alt="스크린샷 2021-03-01 오후 8 02 28" src="https://user-images.githubusercontent.com/43164924/109488553-0ffa2900-7ac9-11eb-8d08-1e7d7ea7aff3.png">
-  - reserve 서비스를 이용해 예약을 하여도 문제가 없이 동작한다.
-  <img width="906" alt="스크린샷 2021-03-01 오후 8 03 47" src="https://user-images.githubusercontent.com/43164924/109488704-3e780400-7ac9-11eb-80ee-ad1714bf8991.png">
+  - reserve 서비스와 room 서비스가 둘 다 정상 작동을 하고 있을 경우, 이상이 없이 잘 된다. <img width="1116" alt="스크린샷 2021-03-01 오후 8 01 56" src="https://user-images.githubusercontent.com/43164924/109488499-fc4ec280-7ac8-11eb-9a52-77d6e4939417.png">
+  - room 서비스를 내렸다. <img width="298" alt="스크린샷 2021-03-01 오후 8 02 28" src="https://user-images.githubusercontent.com/43164924/109488553-0ffa2900-7ac9-11eb-8d08-1e7d7ea7aff3.png">
+  - reserve 서비스를 이용해 예약을 하여도 문제가 없이 동작한다. <img width="906" alt="스크린샷 2021-03-01 오후 8 03 47" src="https://user-images.githubusercontent.com/43164924/109488704-3e780400-7ac9-11eb-80ee-ad1714bf8991.png">
 
 ## CQRS
 
