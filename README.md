@@ -40,6 +40,243 @@ https://workflowy.com/s/assessment/qJn45fBdVZn4atl3
 ### 헥사고날 아키텍쳐 다이어그램 도출 (Polyglot)
 <img width="1200" alt="스크린샷 2021-03-01 오후 6 14 04" src="https://user-images.githubusercontent.com/43164924/109476149-ea195800-7ab9-11eb-88c3-4e231a205c70.png">
 
+# 구현
+도출해낸 헥사고날 아키텍처에 맞게, 로컬에서 SpringBoot를 이용해 Maven 빌드 하였다. 각각의 포트넘버는 8081 ~ 8084, 8088 이다.
+
+    cd conference
+    mvn spring-boot:run
+    
+    cd gateway
+    mvn spring-boot:run
+    
+    cd reserve
+    mvn spring-boot:run
+    
+    cd schedule
+    mvn spring-boot:run
+  
+## DDD의 적용
+**Room 서비스의 Reserve.java**
+
+```java
+package meetingroom;
+
+import javax.persistence.*;
+import org.springframework.beans.BeanUtils;
+import java.util.List;
+
+@Entity
+@Table(name="Room_table")
+public class Room {
+
+    @Id
+    @GeneratedValue(strategy=GenerationType.AUTO)
+    private Long id;
+    private String status;
+    private Integer floor;
+
+    @PostPersist
+    public void onPostPersist(){
+        Added added = new Added();
+        BeanUtils.copyProperties(this, added);
+        added.publishAfterCommit();
+    }
+    public Long getId() {
+        return id;
+    }
+    public void setId(Long id) {
+        this.id = id;
+    }
+    public String getStatus() {
+        return status;
+    }
+    public void setStatus(String status) {
+        this.status = status;
+    }
+    public Integer getFloor() {
+        return floor;
+    }
+    public void setFloor(Integer floor) {
+        this.floor = floor;
+    }
+}
+```
+
+**Room 서비스의 PolicyHandler.java**
+```java
+package meetingroom;
+
+import meetingroom.config.kafka.KafkaProcessor;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cloud.stream.annotation.StreamListener;
+import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.stereotype.Service;
+
+import java.util.Optional;
+
+@Service
+public class PolicyHandler{
+    @Autowired
+    RoomRepository roomRepository;
+
+    @StreamListener(KafkaProcessor.INPUT)
+    public void onStringEventListener(@Payload String eventString){
+
+    }
+
+    @StreamListener(KafkaProcessor.INPUT)
+    public void wheneverCanceled_(@Payload Canceled canceled){
+
+        if(canceled.isMe()){
+            Optional<Room> room = roomRepository.findById(canceled.getRoomId());
+            System.out.println("##### listener  : " + canceled.toJson());
+            if (room.isPresent()){
+                room.get().setStatus("Available");//회의실 예약이 취소되어 예약이 가능해짐.
+                roomRepository.save(room.get());
+            }
+        }
+    }
+    @StreamListener(KafkaProcessor.INPUT)
+    public void wheneverReserved_(@Payload Reserved reserved){
+
+        if(reserved.isMe()){
+            Optional<Room> room = roomRepository.findById(reserved.getRoomId());
+            System.out.println("##### listener  : " + reserved.toJson());
+            if (room.isPresent()){
+                room.get().setStatus("Reserved");//회의실이 예약됨.
+                roomRepository.save(room.get());
+            }
+        }
+    }
+    @StreamListener(KafkaProcessor.INPUT)
+    public void wheneverUserChecked_(@Payload UserChecked userChecked){
+
+        if(userChecked.isMe()){
+            Optional<Room> room = roomRepository.findById(userChecked.getRoomId());
+            System.out.println("##### listener  : " + userChecked.toJson());
+            if(room.isPresent()){
+                room.get().setStatus("Started");//회의가 시작됨.
+                roomRepository.save(room.get());
+            }
+        }
+    }
+    @StreamListener(KafkaProcessor.INPUT)
+    public void wheneverEnded_(@Payload Ended ended){
+
+        if(ended.isMe()){
+            Optional<Room> room = roomRepository.findById(ended.getRoomId());
+            System.out.println("##### listener  : " + ended.toJson());
+            if(room.isPresent()){
+                room.get().setStatus("Available");//회의가 종료됨.
+                roomRepository.save(room.get());
+            }
+        }
+    }
+
+}
+
+```
+
+
+- 적용 후 REST API의 테스트를 통해 정상적으로 작동함을 알 수 있었다.
+- 회의실 등록(Added) 후 결과
+
+<img width="1116" alt="스크린샷 2021-03-01 오후 6 38 24" src="https://user-images.githubusercontent.com/43164924/109479041-5184d700-7abd-11eb-84d6-782c4b94779e.png">
+
+
+- 회의 예약(Reserved) 후 결과
+
+<img width="1116" alt="스크린샷 2021-03-01 오후 6 37 36" src="https://user-images.githubusercontent.com/43164924/109478970-3ade8000-7abd-11eb-836a-e07a7b3dec80.png">
+
+## Gateway 적용
+API Gateway를 통해 마이크로 서비스들의 진입점을 하나로 진행하였다.
+```yml
+server:
+  port: 8088
+
+---
+
+spring:
+  profiles: default
+  cloud:
+    gateway:
+      routes:
+        - id: conference
+          uri: http://localhost:8081
+          predicates:
+            - Path=/conferences/** 
+        - id: reserve
+          uri: http://localhost:8082
+          predicates:
+            - Path=/reserves/** 
+        - id: room
+          uri: http://localhost:8083
+          predicates:
+            - Path=/rooms/** 
+        - id: schedule
+          uri: http://localhost:8084
+          predicates:
+            - Path= /reserveTables/**
+      globalcors:
+        corsConfigurations:
+          '[/**]':
+            allowedOrigins:
+              - "*"
+            allowedMethods:
+              - "*"
+            allowedHeaders:
+              - "*"
+            allowCredentials: true
+
+
+---
+
+spring:
+  profiles: docker
+  cloud:
+    gateway:
+      routes:
+        - id: conference
+          uri: http://conference:8080
+          predicates:
+            - Path=/conferences/** 
+        - id: reserve
+          uri: http://reserve:8080
+          predicates:
+            - Path=/reserves/** 
+        - id: room
+          uri: http://room:8080
+          predicates:
+            - Path=/rooms/** 
+        - id: schedule
+          uri: http://schedule:8080
+          predicates:
+            - Path= /reserveTables/**
+      globalcors:
+        corsConfigurations:
+          '[/**]':
+            allowedOrigins:
+              - "*"
+            allowedMethods:
+              - "*"
+            allowedHeaders:
+              - "*"
+            allowCredentials: true
+
+server:
+  port: 8080
+
+```
+
+## Polyglot Persistence
+- Conference 서비스의 경우, 다른 서비스들이 h2 저장소를 이용한 것과는 다르게 hsql을 이용하였다. 
+- 이 작업을 통해 서비스들이 각각 다른 데이터베이스를 사용하더라도 전체적인 기능엔 문제가 없음을, 즉 Polyglot Persistence를 충족하였다.
+
+<img width="446" alt="스크린샷 2021-03-01 오후 6 43 02" src="https://user-images.githubusercontent.com/43164924/109479663-f6071900-7abd-11eb-8c22-eda690cadea4.png">
+
+
 
 # 운영
 ## CI/CD 설정
