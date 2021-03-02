@@ -58,7 +58,7 @@ https://workflowy.com/s/assessment/qJn45fBdVZn4atl3
     mvn spring-boot:run
   
 ## DDD의 적용
-**Room 서비스의 Reserve.java**
+**Room 서비스의 Room.java**
 
 ```java
 package meetingroom;
